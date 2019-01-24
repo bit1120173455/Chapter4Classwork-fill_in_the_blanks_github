@@ -12,17 +12,30 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ImageView;
+import android.widget.Toast;
 
+import com.bumptech.glide.Glide;
 import com.bytedance.android.lesson.restapi.solution.bean.Feed;
+import com.bytedance.android.lesson.restapi.solution.bean.FeedResponse;
+import com.bytedance.android.lesson.restapi.solution.bean.PostVideoResponse;
+import com.bytedance.android.lesson.restapi.solution.newtork.IMiniDouyinService;
+import com.bytedance.android.lesson.restapi.solution.newtork.RetrofitManager;
 import com.bytedance.android.lesson.restapi.solution.utils.ResourceUtils;
 
+
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
 import okhttp3.RequestBody;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Call;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
 
 public class Solution2C2Activity extends AppCompatActivity {
 
@@ -85,8 +98,8 @@ public class Solution2C2Activity extends AppCompatActivity {
                 ImageView iv = (ImageView) viewHolder.itemView;
 
                 // TODO-C2 (10) Uncomment these 2 lines, assign image url of Feed to this url variable
-//                String url = mFeeds.get(i).;
-//                Glide.with(iv.getContext()).load(url).into(iv);
+                String url = mFeeds.get(i).getIurl();
+                Glide.with(iv.getContext()).load(url).into(iv);
             }
 
             @Override public int getItemCount() {
@@ -97,11 +110,19 @@ public class Solution2C2Activity extends AppCompatActivity {
 
     public void chooseImage() {
         // TODO-C2 (4) Start Activity to select an image
+        Intent intent = new Intent();
+        intent.setType("image/*");
+        intent.setAction(Intent.ACTION_GET_CONTENT);
+        startActivityForResult(Intent.createChooser(intent,"select picture"),PICK_IMAGE);
     }
 
 
     public void chooseVideo() {
         // TODO-C2 (5) Start Activity to select a video
+        Intent intent = new Intent();
+        intent.setType("video/*");
+        intent.setAction(Intent.ACTION_GET_CONTENT);
+        startActivityForResult(Intent.createChooser(intent,"select video"),PICK_VIDEO);
     }
 
     @Override
@@ -136,16 +157,59 @@ public class Solution2C2Activity extends AppCompatActivity {
         mBtn.setEnabled(false);
 
         // TODO-C2 (6) Send Request to post a video with its cover image
+        Retrofit retrofit =new Retrofit.Builder()
+                .baseUrl("http://10.108.10.39:8080/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+        final IMiniDouyinService iMiniDouyinService = retrofit.create(IMiniDouyinService.class);
+        new Thread(){
+            @Override
+            public  void run(){
+                Call<PostVideoResponse> call = iMiniDouyinService.createVideo("1120173455","赵明阳",
+                        getMultipartFromUri("cover_image",mSelectedImage),
+                        getMultipartFromUri("video",mSelectedVideo));
+                call.enqueue(new Callback<PostVideoResponse>() {
+                    @Override
+                    public void onResponse(Call<PostVideoResponse> call, Response<PostVideoResponse> response) {
+                    runOnUiThread(()-> Toast.makeText(Solution2C2Activity.this, "上传成功", Toast.LENGTH_SHORT).show());
+                   }
+
+                    @Override
+                    public void onFailure(Call<PostVideoResponse> call, Throwable t) {
+                        runOnUiThread(()->Toast.makeText(Solution2C2Activity.this, "上传失败", Toast.LENGTH_SHORT).show());
+                   }
+                });
+            }
+        }.start();
         // if success, make a text Toast and show
     }
 
-    public void fetchFeed(View view) {
+    public void fetchFeed(View view) throws IOException {
         mBtnRefresh.setText("requesting...");
         mBtnRefresh.setEnabled(false);
 
         // TODO-C2 (9) Send Request to fetch feed
+        getResponse(new Callback<FeedResponse>() {
+            @Override
+            public void onResponse(Call<FeedResponse> call, Response<FeedResponse> response){
+                mFeeds = response.body().getFeedList();
+                mRv.getAdapter().notifyDataSetChanged();
+                resetRefreshBtn();
+                }
+            @Override public void onFailure(Call<FeedResponse> call, Throwable t) {
+                resetRefreshBtn();
+                }
+            });
         // if success, assign data to mFeeds and call mRv.getAdapter().notifyDataSetChanged()
         // don't forget to call resetRefreshBtn() after response received
+    }
+    public  void getResponse(Callback<FeedResponse> callback) {
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl("http://10.108.10.39:8080/")
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+        retrofit.create(IMiniDouyinService.class).getFeed().
+                enqueue(callback);
     }
 
     private void resetRefreshBtn() {
